@@ -20,7 +20,7 @@
 #include <time.h>
 
 #include <sys/time.h>
- 
+
 /**
  * \brief Default row size.
  */
@@ -182,7 +182,7 @@ int parse_cmdline(int argc, char** argv,
   long n = DEFAULT_COLUMN_SIZE;
   int ret = 1;
   int threads = sysconf(_SC_NPROCESSORS_ONLN);
- 
+
   assert(configuration);
 
   while((opt = getopt(argc, argv, options)) != -1)
@@ -256,9 +256,9 @@ int main(int argc, char** argv)
   double start = 0;
   double end = 0;
   int ret = 0;
-  
+
   ret = parse_cmdline(argc, argv, &config);
-  
+
   if(ret == 0)
   {
     exit(EXIT_SUCCESS);
@@ -299,7 +299,7 @@ int main(int argc, char** argv)
     printf("Matrix 2:\n");
     mat_print(mat2, m, n);
   }
-    
+
   fprintf(stdout, "Compute with %zu thread(s)\n", threads);
 
   start = util_gettime_us();

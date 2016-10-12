@@ -302,7 +302,7 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
             kernel_name, device_name, status);
         continue;
       }
-      
+
       if((status = clEnqueueReadBuffer(queue, output_result, CL_FALSE, 0,
             M * N * sizeof(int), result, 0, NULL, NULL)) != CL_SUCCESS)
       {
@@ -368,7 +368,7 @@ int parse_cmdline(int argc, char** argv,
   long m = DEFAULT_ROW_SIZE;
   long n = DEFAULT_COLUMN_SIZE;
   int ret = 1;
-  
+
   assert(configuration);
 
   while((opt = getopt(argc, argv, options)) != -1)
@@ -432,7 +432,7 @@ int main(int argc, char** argv)
   int ret = 0;
 
   ret = parse_cmdline(argc, argv, &config);
-  
+
   if(ret == 0)
   {
     exit(EXIT_SUCCESS);
