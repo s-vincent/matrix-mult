@@ -1,0 +1,5 @@
+Additional methods:
+- POSIX threads;
+- MPI;
+- OpenACC.
+
