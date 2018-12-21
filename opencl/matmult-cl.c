@@ -220,110 +220,112 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
     for(int device_idx = 0 ; device_idx < nb_devices ; device_idx++)
     {
       queue = clCreateCommandQueue(context, devices[device_idx], 0, &status);
-      if(status == CL_SUCCESS)
-      {
-        clGetDeviceInfo(devices[device_idx], CL_DEVICE_NAME,
-            sizeof(device_name), device_name, NULL);
-        break;
-      }
-      else
-      {
-        printf("clCreateCommandQueue failed on device %d platform %d\n", device_idx, i);
-        continue;
-      }
-    }
-
-    if(status != CL_SUCCESS)
-    {
-      fprintf(stderr, "clCreateCommandQueue failed for device 0: status=%d\n",
-            status);
-      clReleaseProgram(program);
-      clReleaseContext(context);
-      free(devices);
-      continue;
-    }
-
-    /* retrieves kernels from program */
-    if((nb_kernels = opencl_get_kernels(program, &kernels, &status)) <= 0)
-    {
-      fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n", nb_kernels,
-          status);
-
-      clReleaseCommandQueue(queue);
-      clReleaseProgram(program);
-      clReleaseContext(context);
-      free(devices);
-      continue;
-    }
-
-    /* creates the different OpenCL buffer */
-    input_mat1 = clCreateBuffer(context,
-        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, M * N * sizeof(int), mat1,
-        &status);
-    input_mat2 = clCreateBuffer(context,
-        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, W * N * sizeof(int), mat2,
-        &status);
-    output_result = clCreateBuffer(context,
-        CL_MEM_WRITE_ONLY, W * M * sizeof(int), NULL,
-        &status);
-
-    /* execute all the kernels */
-    for(int j = 0 ; j < nb_kernels ; j++)
-    {
-      char kernel_name[1024];
-      size_t global_work_offset[2] = {0, 0};
-      size_t global_work_size[2] = {M, N};
-      size_t local_work_size[2] = {16, 16};
-
-      clGetKernelInfo(kernels[j], CL_KERNEL_FUNCTION_NAME, sizeof(kernel_name),
-          kernel_name, NULL);
-
-      status = clSetKernelArg(kernels[j], 0, sizeof(cl_mem), &input_mat1);
-      status |= clSetKernelArg(kernels[j], 1, sizeof(cl_mem), &input_mat2);
-      status |= clSetKernelArg(kernels[j], 2, sizeof(cl_mem), &output_result);
-      status |= clSetKernelArg(kernels[j], 3, sizeof(cl_uint), &M);
-      status |= clSetKernelArg(kernels[j], 4, sizeof(cl_uint), &N);
-      status |= clSetKernelArg(kernels[j], 5, sizeof(cl_uint), &W);
 
       if(status != CL_SUCCESS)
       {
-        fprintf(stderr,
-            "Failed to set arguments for kernel %s on %s: status=%d\n",
-            kernel_name, device_name, status);
+        printf("clCreateCommandQueue failed on device %d platform %d\n",
+            device_idx, i);
         continue;
       }
-
-      start = util_gettime_us();
-      if((status = clEnqueueNDRangeKernel(queue, kernels[j], 2,
-              global_work_offset, global_work_size, local_work_size,
-              0, NULL, NULL)) != CL_SUCCESS)
+      else
       {
-        fprintf(stderr, "Failed to clEnqueueTask %s on %s: status=%d\n",
-            kernel_name, device_name, status);
-        continue;
-      }
+        clGetDeviceInfo(devices[device_idx], CL_DEVICE_NAME,
+            sizeof(device_name), device_name, NULL);
 
-      if((status = clEnqueueReadBuffer(queue, output_result, CL_FALSE, 0,
-            M * N * sizeof(int), result, 0, NULL, NULL)) != CL_SUCCESS)
-      {
-        fprintf(stderr,
-            "Failed to clEnqueueReadBuffer for kernel %s on %s: status=%d\n",
-            kernel_name, device_name, status);
-        continue;
-      }
+        if(status != CL_SUCCESS)
+        {
+          fprintf(stderr, "clCreateCommandQueue failed for device 0: status=%d\n",
+              status);
+          clReleaseProgram(program);
+          clReleaseContext(context);
+          free(devices);
+          continue;
+        }
 
-      clFinish(queue);
-      end = util_gettime_us();
-      success = 1;
-      fprintf(stdout, "%s executed on %s in \t%f ms\n", kernel_name,
-          device_name, (end - start) / 1000);
+        /* retrieves kernels from program */
+        if((nb_kernels = opencl_get_kernels(program, &kernels, &status)) <= 0)
+        {
+          fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n", nb_kernels,
+              status);
+
+          clReleaseCommandQueue(queue);
+          clReleaseProgram(program);
+          clReleaseContext(context);
+          free(devices);
+          continue;
+        }
+
+        /* creates the different OpenCL buffer */
+        input_mat1 = clCreateBuffer(context,
+            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, M * N * sizeof(int), mat1,
+            &status);
+        input_mat2 = clCreateBuffer(context,
+            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, W * N * sizeof(int), mat2,
+            &status);
+        output_result = clCreateBuffer(context,
+            CL_MEM_WRITE_ONLY, W * M * sizeof(int), NULL,
+            &status);
+
+        /* execute all the kernels */
+        for(int j = 0 ; j < nb_kernels ; j++)
+        {
+          char kernel_name[1024];
+          size_t global_work_offset[2] = {0, 0};
+          size_t global_work_size[2] = {M, N};
+          size_t local_work_size[2] = {16, 16};
+
+          clGetKernelInfo(kernels[j], CL_KERNEL_FUNCTION_NAME, sizeof(kernel_name),
+              kernel_name, NULL);
+
+          status = clSetKernelArg(kernels[j], 0, sizeof(cl_mem), &input_mat1);
+          status |= clSetKernelArg(kernels[j], 1, sizeof(cl_mem), &input_mat2);
+          status |= clSetKernelArg(kernels[j], 2, sizeof(cl_mem), &output_result);
+          status |= clSetKernelArg(kernels[j], 3, sizeof(cl_uint), &M);
+          status |= clSetKernelArg(kernels[j], 4, sizeof(cl_uint), &N);
+          status |= clSetKernelArg(kernels[j], 5, sizeof(cl_uint), &W);
+
+          if(status != CL_SUCCESS)
+          {
+            fprintf(stderr,
+                "Failed to set arguments for kernel %s on %s: status=%d\n",
+                kernel_name, device_name, status);
+            continue;
+          }
+
+          start = util_gettime_us();
+          if((status = clEnqueueNDRangeKernel(queue, kernels[j], 2,
+                  global_work_offset, global_work_size, local_work_size,
+                  0, NULL, NULL)) != CL_SUCCESS)
+          {
+            fprintf(stderr, "Failed to clEnqueueTask %s on %s: status=%d\n",
+                kernel_name, device_name, status);
+            continue;
+          }
+
+          if((status = clEnqueueReadBuffer(queue, output_result, CL_FALSE, 0,
+                  M * N * sizeof(int), result, 0, NULL, NULL)) != CL_SUCCESS)
+          {
+            fprintf(stderr,
+                "Failed to clEnqueueReadBuffer for kernel %s on %s: status=%d\n",
+                kernel_name, device_name, status);
+            continue;
+          }
+
+          clFinish(queue);
+          end = util_gettime_us();
+          success = 1;
+          fprintf(stdout, "%s executed on %s in \t%f ms\n", kernel_name,
+              device_name, (end - start) / 1000);
+        }
+
+        clReleaseMemObject(input_mat1);
+        clReleaseMemObject(input_mat2);
+        clReleaseMemObject(output_result);
+        opencl_release_kernels(&kernels, nb_kernels);
+        clReleaseCommandQueue(queue);
+      }
     }
 
-    clReleaseMemObject(input_mat1);
-    clReleaseMemObject(input_mat2);
-    clReleaseMemObject(output_result);
-    opencl_release_kernels(&kernels, nb_kernels);
-    clReleaseCommandQueue(queue);
     clReleaseProgram(program);
     clReleaseContext(context);
     free(devices);
