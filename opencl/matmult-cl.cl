@@ -16,7 +16,7 @@
  * \def BLOCK_SIZE
  * \brief Size of a matrix block.
  */
-#define BLOCK_SIZE 16
+static constant size_t BLOCK_SIZE = 16;
 
 /**
  * \brief Multiply two matrixes and store result in third ones.
@@ -69,12 +69,12 @@ __kernel void matmult2(__global int* mat1, __global int* mat2,
     size_t mat1_step = BLOCK_SIZE;
     size_t mat2_step = BLOCK_SIZE * W;
     int tmp = 0;
+    __local int local_row[BLOCK_SIZE * BLOCK_SIZE];
+    __local int local_col[BLOCK_SIZE * BLOCK_SIZE];
 
     for(size_t off1 = mat1_offset, off2 = mat2_offset ; off1 < mat1_offset_end ;
         off1 += mat1_step, off2 += mat2_step)
     {
-        __local int local_row[BLOCK_SIZE * BLOCK_SIZE];
-        __local int local_col[BLOCK_SIZE * BLOCK_SIZE];
         size_t idx = loci * BLOCK_SIZE + locj;
 
         /* copy block of matrix from global memory to local */
@@ -124,13 +124,12 @@ __kernel void matmult3(__global int* mat1, __global int* mat2,
     size_t mat1_step = BLOCK_SIZE;
     size_t mat2_step = BLOCK_SIZE * W;
     int tmp = 0;
+    __local int local_row[BLOCK_SIZE][BLOCK_SIZE];
+    __local int local_col[BLOCK_SIZE][BLOCK_SIZE];
 
     for(size_t off1 = mat1_offset, off2 = mat2_offset ; off1 < mat1_offset_end ;
         off1 += mat1_step, off2 += mat2_step)
     {
-        __local int local_row[BLOCK_SIZE][BLOCK_SIZE];
-        __local int local_col[BLOCK_SIZE][BLOCK_SIZE];
-
         /* copy block of matrix from global memory to local */
         local_row[locj][loci] = mat1[off1 + locj * M + loci];
         local_col[locj][loci] = mat2[off2 + locj * W + loci];
