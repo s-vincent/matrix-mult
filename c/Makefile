@@ -8,6 +8,6 @@ matmult: matmult.c
 	$(CC) $(CFLAGS) -o $@ $? $(LDFLAGS)
 
 clean:
-	rm $(BIN)
+	rm -f $(BIN)
 	rm -f *.o 
 

@@ -8,6 +8,6 @@ matmult-pthread: matmult-pthread.c
 	$(CC) $(CFLAGS) -D_REENTRANT -o $@ $? $(LDFLAGS) -lpthread
 
 clean:
-	rm $(BIN)
+	rm -f $(BIN)
 	rm -f *.o 
 

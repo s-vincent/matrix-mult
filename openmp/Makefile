@@ -8,6 +8,6 @@ matmult-omp: matmult-omp.c
 	$(CC) $(CFLAGS) -fopenmp -o $@ $? $(LDFLAGS) -lgomp
 
 clean:
-	rm $(BIN)
+	rm -f $(BIN)
 	rm -f *.o 
 

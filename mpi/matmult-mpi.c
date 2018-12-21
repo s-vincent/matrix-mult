@@ -1,25 +1,32 @@
 /*
- * Copyright (c) 2014-2016, Sebastien Vincent
+ * Copyright (c) 2014-2017, Sebastien Vincent
  *
  * Distributed under the terms of the BSD 3-clause License.
  * See the LICENSE file for details.
  */
 
 /**
- * \file matmult-omp.c
- * \brief Matrix multiplication in C/OpenMP.
+ * \file matmult-mpi.c
+ * \brief Matrix multiplication in C/MPI.
  * \author Sebastien Vincent
- * \date 2014-2016
+ * \date 2018
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <assert.h>
 #include <time.h>
 
 #include <sys/time.h>
+
+#include <mpi.h>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 /**
  * \brief Default row size.
@@ -57,17 +64,6 @@ struct configuration
    */
   size_t threads;
 };
-
-/**
- * \brief Get time in microseconds.
- * \return time in microseconds.
- */
-static double util_gettime_us(void)
-{
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000000 + t.tv_usec;
-}
 
 /**
  * \brief Initializes the matrixes.
@@ -111,22 +107,42 @@ void mat_print(int* mat, size_t m, size_t n)
  * \param m row size of first matrix.
  * \param n column size of first matrix.
  * \param w row size of second matrix.
- * \param threads thread number.
+ * \param rank MPI rank.
+ * \param world_size Total number of MPI nodes.
+ * \param threads number of threads to use (OpenMP only).
  * \return 0 if success, -1 if matrixes cannot be multiplied.
  */
-int mat_mult_omp(int* mat1, int* mat2, int* result, size_t m, size_t n,
-    size_t w, size_t threads)
+int mat_mult_mpi(int* mat1, int* mat2, int* result, size_t m, size_t n,
+    size_t w, size_t rank, size_t world_size, size_t threads)
 {
-  if(n != w)
+  int* res = malloc(sizeof(int) * (m * n) / world_size);
+
+  (void)rank;
+  (void)threads;
+
+  if(n != w || !res)
   {
     return -1;
   }
 
+  /* transmit row to each process */
+  MPI_Scatter(mat1, (m * n) / world_size, MPI_INT, mat1, (m * n) / world_size,
+      MPI_INT, 0 /* rank root */, MPI_COMM_WORLD);
+
+  /* broadcast second matrix to other nodes */
+  MPI_Bcast(mat2, m * n, MPI_INT, 0, MPI_COMM_WORLD);
+
+	/* matrix multiply */
+
+#if _OPENMP
   /* to set spread way, add to next line: proc_bind(spread) */
   #pragma omp parallel num_threads(threads)
-  for(size_t i = 0 ; i < m ; i++)
+#endif
+  for(size_t i = 0 ; i < (m / world_size) ; i++)
   {
+#if _OPENMP
     #pragma omp for schedule(static)
+#endif
     for(size_t j = 0 ; j < n ; j++)
     {
       int tmp = 0;
@@ -136,10 +152,15 @@ int mat_mult_omp(int* mat1, int* mat2, int* result, size_t m, size_t n,
         tmp += mat1[i * w + k] * mat2[k * n + j];
       }
 
-      result[i * m + j] = tmp;
+      res[i * m + j] = tmp;
     }
   }
 
+  MPI_Gather(res, (m * n) / world_size, MPI_INT, result, (m * n) / world_size,
+      MPI_INT, 0, MPI_COMM_WORLD);
+
+  free(res);
+  MPI_Barrier(MPI_COMM_WORLD);
   return 0;
 }
 
@@ -149,13 +170,19 @@ int mat_mult_omp(int* mat1, int* mat2, int* result, size_t m, size_t n,
  */
 void print_help(const char* program)
 {
-  fprintf(stdout, "Usage: %s [-m row size] [-n column size] [-t nb] "
+  fprintf(stdout, "Usage: %s [-m row size] [-n column size] "
+#ifdef _OPENMP
+      "[-t thread_number]"
+#endif
       "[-p] [-h]\n\n"
       "  -h\t\tDisplay this help\n"
+#ifdef _OPENMP
+      "  -t nb\t\tDefines number of threads to use\n"
+#endif
       "  -p\t\tPrint the input and output matrixes\n"
       "  -m row\tDefine row size (default 1024)\n"
-      "  -n col\tDefine column size (default 1024)\n"
-      "  -t nb\t\tDefines number of threads to use\n", program);
+      "  -n col\tDefine column size (default 1024)\n",
+      program);
 }
 
 /**
@@ -213,6 +240,7 @@ int parse_cmdline(int argc, char** argv,
           ret = -1;
         }
         break;
+
       case 't':
         threads = atol(optarg);
         if(threads <= 0)
@@ -231,7 +259,11 @@ int parse_cmdline(int argc, char** argv,
   configuration->print_matrix = print_matrix;
   configuration->m = m;
   configuration->n = n;
-  configuration->threads = (size_t)threads;
+#ifdef _OPENMP
+  configuration->threads = threads;
+#else
+  configuration->threads = 1;
+#endif
 
   return ret;
 }
@@ -251,11 +283,14 @@ int main(int argc, char** argv)
   size_t n = DEFAULT_COLUMN_SIZE;
   size_t w = DEFAULT_COLUMN_SIZE;
   int print_matrix = 0;
-  size_t threads = 0;
   struct configuration config;
   double start = 0;
   double end = 0;
   int ret = 0;
+  int world_size = 0;
+  int world_rank = 0;
+  char processor_name[MPI_MAX_PROCESSOR_NAME];
+  int name_len = 0;
 
   ret = parse_cmdline(argc, argv, &config);
 
@@ -272,7 +307,51 @@ int main(int argc, char** argv)
   n = config.n;
   w = config.n;
   print_matrix = config.print_matrix;
-  threads = config.threads;
+
+  /* MPI initialization */
+#if _OPENMP
+  int required = MPI_THREAD_SERIALIZED;
+  int provided = 0;
+
+  if(MPI_Init_thread(NULL, NULL, required, &provided) != MPI_SUCCESS)
+  {
+    fprintf(stderr, "Failed to initialize MPI.\n");
+    exit(EXIT_FAILURE);
+  }
+    
+  if(provided < required)
+  {
+    fprintf(stderr, "Failed to configure MPI thread.\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+
+#else
+  if(MPI_Init(NULL, NULL) != MPI_SUCCESS)
+  {
+    fprintf(stderr, "Failed to initialize MPI.\n");
+    exit(EXIT_FAILURE);
+  }
+#endif
+
+  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+  MPI_Get_processor_name(processor_name, &name_len);
+
+  if(m % world_size)
+  {
+    if(world_rank == 0)
+    {
+      fprintf(stderr,
+          "Matrix size (%zu) not divisible by number of processor (%d)\n",
+          m * n,
+          world_size);
+    }
+
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+
+  fprintf(stdout, "MPI from processor %s, rank %d out of %d\n",
+      processor_name, world_rank, world_size);
 
   mat1 = malloc((m * n) * sizeof(int));
   mat2 = malloc((m * n) * sizeof(int));
@@ -284,39 +363,49 @@ int main(int argc, char** argv)
     free(mat1);
     free(mat2);
     free(mat3);
+
+    MPI_Finalize();
     exit(EXIT_FAILURE);
   }
 
   /* random initialization */
   srand(time(NULL));
 
-  mat_init(mat1, mat2, m, n);
-
-  if(print_matrix)
+  if(world_rank == 0)
   {
-    printf("Matrix 1:\n");
-    mat_print(mat1, m, n);
-    printf("Matrix 2:\n");
-    mat_print(mat2, m, n);
+    mat_init(mat1, mat2, m, n);
+
+    if(print_matrix)
+    {
+      fprintf(stdout, "Matrix 1:\n");
+      mat_print(mat1, m, n);
+      fprintf(stdout, "Matrix 2:\n");
+      mat_print(mat2, m, n);
+    }
+
+    fprintf(stdout, "Compute with %zu MPI node(s) with %zu thread(s) \n",
+        (size_t)world_size, config.threads);
   }
 
-  fprintf(stdout, "Compute with %zu thread(s)\n", threads);
-
-  start = util_gettime_us();
-  if(mat_mult_omp(mat1, mat2, mat3, m, n, w, threads) == -1)
+  start = MPI_Wtime();
+  if(mat_mult_mpi(mat1, mat2, mat3, m, n, w, world_rank, world_size,
+        config.threads) == -1)
   {
     fprintf(stderr, "Matrixes cannot be multiplied\n");
     ret = EXIT_FAILURE;
   }
   else
   {
-    end = util_gettime_us();
+    end = MPI_Wtime();
 
-    fprintf(stdout, "Multiplication success: %f ms\n", (end - start) / 1000);
-
-    if(print_matrix)
+    if(world_rank == 0)
     {
-      mat_print(mat3, m, n);
+      fprintf(stdout, "Multiplication success: %f ms\n", (end - start) * 1000);
+
+      if(print_matrix)
+      {
+        mat_print(mat3, m, n);
+      }
     }
     ret = EXIT_SUCCESS;
   }
@@ -325,6 +414,8 @@ int main(int argc, char** argv)
   free(mat1);
   free(mat2);
   free(mat3);
+
+  MPI_Finalize();
 
   return ret;
 }

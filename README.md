@@ -8,12 +8,12 @@ sequential C.
 
 # POSIX threads
 
-The pthread/ directory contains code that do matrix multiplication with
+The pthread/ directory contains code that does matrix multiplication with
 pthreads.
 
 ## OpenMP
 
-The openmp/ directory contains code that do matrix multiplication in C with
+The openmp/ directory contains code that does matrix multiplication in C with
 OpenMP.
 
 For optimized results, use affinity with OMP_PROC_BIND/OMP_PLACES and pass
@@ -32,9 +32,14 @@ In general for matrix calculation, best results are achieved by using no more
 than number of core threads and by binding one thread on a different core (and
 using only the first logical ones for hyperthreaded CPU).
 
+## Message Passing Interface
+
+The mpi/ directory contains code that does matrix multiplication in C with
+MPI. There are classic MPI version and hybrid MPI/OpenMP version.
+
 ## OpenCL
 
-The opencl/ directory contains code that do matrix multiplication in C with
+The opencl/ directory contains code that does matrix multiplication in C with
 OpenCL to offload calculation.
 
 It contains three different OpenCL kernels. Some may perform better depending on
