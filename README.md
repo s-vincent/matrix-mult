@@ -6,6 +6,11 @@ Matrix multiplication samples.
 The c/ directory contains code that do matrix multiplication in plain
 sequential C.
 
+# POSIX threads
+
+The pthread/ directory contains code that do matrix multiplication with
+pthreads.
+
 ## OpenMP
 
 The openmp/ directory contains code that do matrix multiplication in C with
