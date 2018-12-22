@@ -6,7 +6,7 @@ Matrix multiplication samples.
 The c/ directory contains code that do matrix multiplication in plain
 sequential C.
 
-# POSIX threads
+## POSIX threads
 
 The pthread/ directory contains code that does matrix multiplication with
 pthreads.
