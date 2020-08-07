@@ -219,7 +219,12 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
     /* try to create a queue for one device */
     for(int device_idx = 0 ; device_idx < nb_devices ; device_idx++)
     {
+#if CL_TARGET_OPENCL_VERSION < 200
       queue = clCreateCommandQueue(context, devices[device_idx], 0, &status);
+#else
+      queue = clCreateCommandQueueWithProperties(context, devices[device_idx],
+          NULL, &status);
+#endif
 
       if(status != CL_SUCCESS)
       {
