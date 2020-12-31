@@ -16,7 +16,7 @@
  * \def BLOCK_SIZE
  * \brief Size of a matrix block.
  */
-static constant size_t BLOCK_SIZE = 16;
+#define BLOCK_SIZE 16
 
 /**
  * \brief Multiply two matrixes and store result in third ones.
