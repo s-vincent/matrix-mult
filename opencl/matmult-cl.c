@@ -152,11 +152,14 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
       continue;
     }
 
+    fprintf(stdout, "Platform %d has %d device(s)\n", i, nb_devices);
+
     context = clCreateContext(context_props, nb_devices, devices, NULL, NULL,
         &status);
 
     if(status != CL_SUCCESS)
     {
+      fprintf(stderr, "Failed to create context: status=%d\n", status);
       free(devices);
       continue;
     }
@@ -239,8 +242,10 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
 
         if(status != CL_SUCCESS)
         {
-          fprintf(stderr, "clCreateCommandQueue failed for device 0: status=%d\n",
-              status);
+          fprintf(stderr, "clCreateCommandQueue failed for device "
+              "%d: status=%d\n",
+              device_idx, status);
+
           clReleaseProgram(program);
           clReleaseContext(context);
           free(devices);
@@ -250,8 +255,8 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
         /* retrieves kernels from program */
         if((nb_kernels = opencl_get_kernels(program, &kernels, &status)) <= 0)
         {
-          fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n", nb_kernels,
-              status);
+          fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n",
+              nb_kernels, status);
 
           clReleaseCommandQueue(queue);
           clReleaseProgram(program);
@@ -279,12 +284,13 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
           size_t global_work_size[2] = {M, N};
           size_t local_work_size[2] = {16, 16};
 
-          clGetKernelInfo(kernels[j], CL_KERNEL_FUNCTION_NAME, sizeof(kernel_name),
-              kernel_name, NULL);
+          clGetKernelInfo(kernels[j], CL_KERNEL_FUNCTION_NAME,
+              sizeof(kernel_name), kernel_name, NULL);
 
           status = clSetKernelArg(kernels[j], 0, sizeof(cl_mem), &input_mat1);
           status |= clSetKernelArg(kernels[j], 1, sizeof(cl_mem), &input_mat2);
-          status |= clSetKernelArg(kernels[j], 2, sizeof(cl_mem), &output_result);
+          status |= clSetKernelArg(kernels[j], 2, sizeof(cl_mem),
+              &output_result);
           status |= clSetKernelArg(kernels[j], 3, sizeof(cl_uint), &M);
           status |= clSetKernelArg(kernels[j], 4, sizeof(cl_uint), &N);
           status |= clSetKernelArg(kernels[j], 5, sizeof(cl_uint), &W);
@@ -311,7 +317,7 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
                   M * N * sizeof(int), result, 0, NULL, NULL)) != CL_SUCCESS)
           {
             fprintf(stderr,
-                "Failed to clEnqueueReadBuffer for kernel %s on %s: status=%d\n",
+                "clEnqueueReadBuffer failed for kernel %s on %s: status=%d\n",
                 kernel_name, device_name, status);
             continue;
           }

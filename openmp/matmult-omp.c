@@ -21,6 +21,8 @@
 
 #include <sys/time.h>
 
+#include <omp.h>
+
 /**
  * \brief Default row size.
  */
