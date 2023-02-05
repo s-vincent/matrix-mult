@@ -1,0 +1,9 @@
+*.o
+*.obj
+c/matmult
+pthread/matmult-pthread
+opencl/matmult-cl
+openmp/matmult-omp
+mpi/matmult-mpi
+mpi/matmult-mpi-omp
+openacc/matmult-oacc
