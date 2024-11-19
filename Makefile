@@ -1,9 +1,9 @@
 TOPTARGETS := all clean
-SUBDIRS := ./c ./pthread ./openmp ./mpi ./opencl
+SUBDIRS := ./c ./pthread ./openmp ./mpi ./opencl ./openacc
 
 $(TOPTARGETS) : $(SUBDIRS)
 
-$(SUBDIRS): 
+$(SUBDIRS):
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 clean: $(SUBDIRS)

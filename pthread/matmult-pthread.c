@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -41,14 +42,9 @@ static const size_t DEFAULT_COLUMN_SIZE = 1024;
 struct configuration
 {
   /**
-   * \brief Row size.
+   * \brief Row/column size.
    */
   size_t m;
-
-  /**
-   * \brief Colummn size.
-   */
-  size_t n;
 
   /**
    * \brief Print input and output matrixes.
@@ -74,28 +70,28 @@ struct mat_mult_data
   /**
    * \brief First matrix.
    */
-  int* mat1;
-  
+  uint64_t* mat1;
+
   /**
    * \brief Second matrix.
    */
-  int* mat2;
+  uint64_t* mat2;
 
   /**
    * \brief Result matrix.
    */
-  int* result;
-  
+  uint64_t* result;
+
   /**
    * \brief Row size.
    */
   size_t m;
-  
+
   /**
    * \brief Colummn size.
    */
   size_t n;
-  
+
   /**
    * \brief Colummn size.
    */
@@ -126,9 +122,9 @@ static double util_gettime_us(void)
 static void* mat_mult_work(void* data)
 {
   struct mat_mult_data* d = (struct mat_mult_data*)data;
-  int* mat1 = d->mat1;
-  int* mat2 = d->mat2;
-  int* result = d->result;
+  uint64_t* mat1 = d->mat1;
+  uint64_t* mat2 = d->mat2;
+  uint64_t* result = d->result;
   size_t m = d->m;
   size_t n = d->n;
   size_t w = d->w;
@@ -139,7 +135,7 @@ static void* mat_mult_work(void* data)
   {
     step = 1;
 
-    /* exits threads that will not work */
+    /* exit threads that will not work */
     if(d->idx >= m)
     {
       return NULL;
@@ -150,7 +146,7 @@ static void* mat_mult_work(void* data)
   {
     for(size_t j = 0 ; j < n ; j++)
     {
-      int tmp = 0;
+      uint64_t tmp = 0;
 
       for(size_t k = 0 ; k < w ; k++)
       {
@@ -171,12 +167,12 @@ static void* mat_mult_work(void* data)
  * \param m row size of the matrix.
  * \param n column size of the matrix.
  */
-void mat_init(int* mat1, int* mat2, size_t m, size_t n)
+void mat_init(uint64_t* mat1, uint64_t* mat2, size_t m, size_t n)
 {
   for(size_t i = 0 ; i < (m * n) ; i++)
   {
-    mat1[i] = rand();
-    mat2[i] = rand();
+    mat1[i] = i;
+    mat2[i] = i;
   }
 }
 
@@ -186,13 +182,13 @@ void mat_init(int* mat1, int* mat2, size_t m, size_t n)
  * \param m row size of the matrix.
  * \param n column size of the matrix.
  */
-void mat_print(int* mat, size_t m, size_t n)
+void mat_print(uint64_t* mat, size_t m, size_t n)
 {
   for(size_t i = 0 ; i < m ; i++)
   {
     for(size_t j = 0 ; j < n ; j++)
     {
-      fprintf(stdout, "%d ", mat[i * m + j]);
+      fprintf(stdout, "%lu ", mat[i * m + j]);
     }
     fprintf(stdout, "\n");
   }
@@ -209,8 +205,8 @@ void mat_print(int* mat, size_t m, size_t n)
  * \param threads thread number.
  * \return 0 if success, -1 if matrixes cannot be multiplied.
  */
-int mat_mult_pthread(int* mat1, int* mat2, int* result, size_t m, size_t n,
-    size_t w, size_t threads)
+int mat_mult_pthread(uint64_t* mat1, uint64_t* mat2, uint64_t* result, size_t m,
+    size_t n, size_t w, size_t threads)
 {
   pthread_t ids[threads];
   struct mat_mult_data datas[threads];
@@ -257,13 +253,12 @@ int mat_mult_pthread(int* mat1, int* mat2, int* result, size_t m, size_t n,
  */
 void print_help(const char* program)
 {
-  fprintf(stdout, "Usage: %s [-m row size] [-n column size] [-t nb] "
+  fprintf(stdout, "Usage: %s [-m row size] [-t nb] "
       "[-p] [-h]\n\n"
       "  -h\t\tDisplay this help\n"
       "  -p\t\tPrint the input and output matrixes\n"
-      "  -m row\tDefine row size (default 1024)\n"
-      "  -n col\tDefine column size (default 1024)\n"
-      "  -t nb\t\tDefines number of threads to use\n", program);
+      "  -m row\tRow/column size (default 1024)\n"
+      "  -t nb\t\tNumber of threads to use\n", program);
 }
 
 /**
@@ -280,14 +275,12 @@ int parse_cmdline(int argc, char** argv,
    * h: print help and exit
    * p: print input and output matrixes
    * m: row size
-   * n: column size
    * t: number of threads to use
    */
-  static const char* options = "hpm:n:t:";
+  static const char* options = "hpm:t:";
   int opt = 0;
   int print_matrix = 0;
   long m = DEFAULT_ROW_SIZE;
-  long n = DEFAULT_COLUMN_SIZE;
   int ret = 1;
   int threads = sysconf(_SC_NPROCESSORS_ONLN);
 
@@ -313,14 +306,6 @@ int parse_cmdline(int argc, char** argv,
           ret = -1;
         }
         break;
-      case 'n':
-        n = atol(optarg);
-        if(n < 2)
-        {
-          fprintf(stderr, "Bad argument for '-n' %ld\n", n);
-          ret = -1;
-        }
-        break;
       case 't':
         threads = atol(optarg);
         if(threads <= 0)
@@ -338,7 +323,6 @@ int parse_cmdline(int argc, char** argv,
 
   configuration->print_matrix = print_matrix;
   configuration->m = m;
-  configuration->n = n;
   configuration->threads = (size_t)threads;
 
   return ret;
@@ -352,15 +336,16 @@ int parse_cmdline(int argc, char** argv,
  */
 int main(int argc, char** argv)
 {
-  int* mat1 = NULL;
-  int* mat2 = NULL;
-  int* mat3 = NULL;
+  uint64_t* mat1 = NULL;
+  uint64_t* mat2 = NULL;
+  uint64_t* mat3 = NULL;
   size_t m = DEFAULT_ROW_SIZE;
   size_t n = DEFAULT_COLUMN_SIZE;
   size_t w = DEFAULT_COLUMN_SIZE;
   int print_matrix = 0;
   size_t threads = 0;
   struct configuration config;
+  size_t nb_elements = 0;
   double start = 0;
   double end = 0;
   int ret = 0;
@@ -377,14 +362,16 @@ int main(int argc, char** argv)
   }
 
   m = config.m;
-  n = config.n;
-  w = config.n;
+  n = config.m;
+  w = config.m;
   print_matrix = config.print_matrix;
   threads = config.threads;
 
-  mat1 = malloc((m * n) * sizeof(int));
-  mat2 = malloc((m * n) * sizeof(int));
-  mat3 = malloc((m * n) * sizeof(int));
+  nb_elements = m * n;
+
+  mat1 = malloc(nb_elements * sizeof(uint64_t));
+  mat2 = malloc(nb_elements * sizeof(uint64_t));
+  mat3 = malloc(nb_elements * sizeof(uint64_t));
 
   if(!mat1 || !mat2 || !mat3)
   {
@@ -394,9 +381,6 @@ int main(int argc, char** argv)
     free(mat3);
     exit(EXIT_FAILURE);
   }
-
-  /* random initialization */
-  srand(time(NULL));
 
   mat_init(mat1, mat2, m, n);
 

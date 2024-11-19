@@ -40,14 +40,9 @@ static const size_t DEFAULT_COLUMN_SIZE = 1024;
 struct configuration
 {
   /**
-   * \brief Row size.
+   * \brief Row/column size.
    */
   size_t m;
-
-  /**
-   * \brief Colummn size.
-   */
-  size_t n;
 
   /**
    * \brief Print input and output matrixes.
@@ -73,12 +68,12 @@ static double util_gettime_us(void)
  * \param m row size of the matrix.
  * \param n column size of the matrix.
  */
-void mat_init(int* mat1, int* mat2, size_t m, size_t n)
+void mat_init(cl_ulong* mat1, cl_ulong* mat2, size_t m, size_t n)
 {
   for(size_t i = 0 ; i < (m * n) ; i++)
   {
-    mat1[i] = rand();
-    mat2[i] = rand();
+    mat1[i] = i;
+    mat2[i] = i;
   }
 }
 
@@ -88,13 +83,13 @@ void mat_init(int* mat1, int* mat2, size_t m, size_t n)
  * \param m row size of the matrix.
  * \param n column size of the matrix.
  */
-void mat_print(int* mat, size_t m, size_t n)
+void mat_print(cl_ulong* mat, size_t m, size_t n)
 {
   for(size_t i = 0 ; i < m ; i++)
   {
     for(size_t j = 0 ; j < n ; j++)
     {
-      fprintf(stdout, "%d ", mat[i * m + j]);
+      fprintf(stdout, "%lu ", mat[i * m + j]);
     }
     fprintf(stdout, "\n");
   }
@@ -111,7 +106,8 @@ void mat_print(int* mat, size_t m, size_t n)
  * \return 0 if success, -1 if matrixes cannot be multiplied or some OpenCL
  * blocking errors.
  */
-int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
+int mat_mult_cl(cl_ulong* mat1, cl_ulong* mat2, cl_ulong* result, size_t M,
+    size_t N, size_t W)
 {
   int ret = 0;
   cl_platform_id* platforms = NULL;
@@ -132,10 +128,8 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
   {
     cl_device_id* devices = NULL;
     int nb_devices = 0;
-    char device_name[1024];
     cl_context context;
     cl_program program;
-    cl_command_queue queue;
     cl_kernel* kernels = NULL;
     int nb_kernels = 0;
     cl_mem input_mat1;
@@ -179,37 +173,35 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
     if((status = clBuildProgram(program, nb_devices, devices, NULL, NULL,
             NULL)) != CL_SUCCESS)
     {
+      cl_build_status build_status;
+
       fprintf(stderr, "clBuildProgram failed: error:%d status=%d\n",
           ret, status);
 
-      for(int j = 0 ; j < nb_devices ; j++)
+      clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_STATUS,
+          sizeof(cl_build_status), &build_status, NULL);
+
+      if(build_status == CL_BUILD_ERROR)
       {
         char* log = NULL;
         size_t log_size = 0;
-        cl_build_status build_status;
 
-        clGetProgramBuildInfo(program, devices[j], CL_PROGRAM_BUILD_STATUS,
-            sizeof(cl_build_status), &build_status, NULL);
+        clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG, 0,
+            NULL, &log_size);
+        log = malloc(sizeof(char) * log_size);
 
-        if(build_status == CL_BUILD_ERROR)
+        if(log)
         {
-          clGetProgramBuildInfo(program, devices[j], CL_PROGRAM_BUILD_LOG, 0,
-              NULL, &log_size);
-          log = malloc(sizeof(char) * log_size);
+          clGetProgramBuildInfo(program, devices[0], CL_PROGRAM_BUILD_LOG,
+              log_size, log, NULL);
+          log[log_size] = 0x00;
 
-          if(log)
-          {
-            clGetProgramBuildInfo(program, devices[j], CL_PROGRAM_BUILD_LOG,
-                log_size, log, NULL);
-            log[log_size] = 0x00;
-
-            fprintf(stderr, "Build error log on device %d:\n%s\n", j, log);
-            free(log);
-          }
-          else
-          {
-            fprintf(stderr, "Cannot print build log error.\n");
-          }
+          fprintf(stderr, "Build error log:\n%s\n", log);
+          free(log);
+        }
+        else
+        {
+          fprintf(stderr, "Cannot print build log error.\n");
         }
       }
 
@@ -219,124 +211,111 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
       continue;
     }
 
-    /* try to create a queue for one device */
-    for(int device_idx = 0 ; device_idx < nb_devices ; device_idx++)
+    /* retrieves kernels from program */
+    if((nb_kernels = opencl_get_kernels(program, &kernels, &status)) <= 0)
     {
+      fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n",
+          nb_kernels, status);
+
+      clReleaseProgram(program);
+      clReleaseContext(context);
+      free(devices);
+      continue;
+    }
+
+    /* try to create a queue for one device */
+    for(int di = 0 ; di < nb_devices ; di++)
+    {
+      cl_device_id device = devices[di];
+      cl_command_queue queue;
+      char device_name[1024];
+
 #if CL_TARGET_OPENCL_VERSION < 200
-      queue = clCreateCommandQueue(context, devices[device_idx], 0, &status);
+      queue = clCreateCommandQueue(context, device, 0, &status);
 #else
-      queue = clCreateCommandQueueWithProperties(context, devices[device_idx],
+      queue = clCreateCommandQueueWithProperties(context, device,
           NULL, &status);
 #endif
 
       if(status != CL_SUCCESS)
       {
-        printf("clCreateCommandQueue failed on device %d platform %d\n",
-            device_idx, i);
+        printf("clCreateCommandQueue failed on device %d platform %d\n", di, i);
         continue;
       }
-      else
+
+      clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(device_name), device_name,
+          NULL);
+
+      /* creates the different OpenCL buffer */
+      input_mat1 = clCreateBuffer(context,
+          CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, M * N * sizeof(cl_ulong),
+          mat1, &status);
+      input_mat2 = clCreateBuffer(context,
+          CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, W * N * sizeof(cl_ulong),
+          mat2, &status);
+      output_result = clCreateBuffer(context,
+          CL_MEM_WRITE_ONLY, W * M * sizeof(cl_ulong), NULL, &status);
+
+      /* execute all the kernels */
+      for(int ki = 0 ; ki < nb_kernels ; ki++)
       {
-        clGetDeviceInfo(devices[device_idx], CL_DEVICE_NAME,
-            sizeof(device_name), device_name, NULL);
+        char kernel_name[1024];
+        size_t global_work_offset[2] = {0, 0};
+        size_t global_work_size[2] = {M, N};
+        size_t local_work_size[2] = {16, 16};
+
+        clGetKernelInfo(kernels[ki], CL_KERNEL_FUNCTION_NAME,
+            sizeof(kernel_name), kernel_name, NULL);
+
+        status = clSetKernelArg(kernels[ki], 0, sizeof(cl_mem), &input_mat1);
+        status |= clSetKernelArg(kernels[ki], 1, sizeof(cl_mem), &input_mat2);
+        status |= clSetKernelArg(kernels[ki], 2, sizeof(cl_mem),
+            &output_result);
+        status |= clSetKernelArg(kernels[ki], 3, sizeof(cl_uint), &M);
+        status |= clSetKernelArg(kernels[ki], 4, sizeof(cl_uint), &N);
+        status |= clSetKernelArg(kernels[ki], 5, sizeof(cl_uint), &W);
 
         if(status != CL_SUCCESS)
         {
-          fprintf(stderr, "clCreateCommandQueue failed for device "
-              "%d: status=%d\n",
-              device_idx, status);
-
-          clReleaseProgram(program);
-          clReleaseContext(context);
-          free(devices);
+          fprintf(stderr,
+              "Failed to set arguments for kernel %s on %s: status=%d\n",
+              kernel_name, device_name, status);
           continue;
         }
 
-        /* retrieves kernels from program */
-        if((nb_kernels = opencl_get_kernels(program, &kernels, &status)) <= 0)
+        start = util_gettime_us();
+        if((status = clEnqueueNDRangeKernel(queue, kernels[ki], 2,
+                global_work_offset, global_work_size, local_work_size,
+                0, NULL, NULL)) != CL_SUCCESS)
         {
-          fprintf(stderr, "No kernels found: nb_kernels=%d status=%d\n",
-              nb_kernels, status);
-
-          clReleaseCommandQueue(queue);
-          clReleaseProgram(program);
-          clReleaseContext(context);
-          free(devices);
+          fprintf(stderr, "Failed to clEnqueueTask %s on %s: status=%d\n",
+              kernel_name, device_name, status);
           continue;
         }
 
-        /* creates the different OpenCL buffer */
-        input_mat1 = clCreateBuffer(context,
-            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, M * N * sizeof(int), mat1,
-            &status);
-        input_mat2 = clCreateBuffer(context,
-            CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, W * N * sizeof(int), mat2,
-            &status);
-        output_result = clCreateBuffer(context,
-            CL_MEM_WRITE_ONLY, W * M * sizeof(int), NULL,
-            &status);
-
-        /* execute all the kernels */
-        for(int j = 0 ; j < nb_kernels ; j++)
+        if((status = clEnqueueReadBuffer(queue, output_result, CL_FALSE, 0,
+                M * N * sizeof(cl_ulong), result, 0, NULL, NULL)) != CL_SUCCESS)
         {
-          char kernel_name[1024];
-          size_t global_work_offset[2] = {0, 0};
-          size_t global_work_size[2] = {M, N};
-          size_t local_work_size[2] = {16, 16};
-
-          clGetKernelInfo(kernels[j], CL_KERNEL_FUNCTION_NAME,
-              sizeof(kernel_name), kernel_name, NULL);
-
-          status = clSetKernelArg(kernels[j], 0, sizeof(cl_mem), &input_mat1);
-          status |= clSetKernelArg(kernels[j], 1, sizeof(cl_mem), &input_mat2);
-          status |= clSetKernelArg(kernels[j], 2, sizeof(cl_mem),
-              &output_result);
-          status |= clSetKernelArg(kernels[j], 3, sizeof(cl_uint), &M);
-          status |= clSetKernelArg(kernels[j], 4, sizeof(cl_uint), &N);
-          status |= clSetKernelArg(kernels[j], 5, sizeof(cl_uint), &W);
-
-          if(status != CL_SUCCESS)
-          {
-            fprintf(stderr,
-                "Failed to set arguments for kernel %s on %s: status=%d\n",
-                kernel_name, device_name, status);
-            continue;
-          }
-
-          start = util_gettime_us();
-          if((status = clEnqueueNDRangeKernel(queue, kernels[j], 2,
-                  global_work_offset, global_work_size, local_work_size,
-                  0, NULL, NULL)) != CL_SUCCESS)
-          {
-            fprintf(stderr, "Failed to clEnqueueTask %s on %s: status=%d\n",
-                kernel_name, device_name, status);
-            continue;
-          }
-
-          if((status = clEnqueueReadBuffer(queue, output_result, CL_FALSE, 0,
-                  M * N * sizeof(int), result, 0, NULL, NULL)) != CL_SUCCESS)
-          {
-            fprintf(stderr,
-                "clEnqueueReadBuffer failed for kernel %s on %s: status=%d\n",
-                kernel_name, device_name, status);
-            continue;
-          }
-
-          clFinish(queue);
-          end = util_gettime_us();
-          success = 1;
-          fprintf(stdout, "%s executed on %s in \t%f ms\n", kernel_name,
-              device_name, (end - start) / 1000);
+          fprintf(stderr,
+              "clEnqueueReadBuffer failed for kernel %s on %s: status=%d\n",
+              kernel_name, device_name, status);
+          continue;
         }
 
-        clReleaseMemObject(input_mat1);
-        clReleaseMemObject(input_mat2);
-        clReleaseMemObject(output_result);
-        opencl_release_kernels(&kernels, nb_kernels);
-        clReleaseCommandQueue(queue);
+        clFinish(queue);
+        end = util_gettime_us();
+        success = 1;
+        fprintf(stdout, "\t%s executed on %s in \t%f ms\n", kernel_name,
+            device_name, (end - start) / 1000);
       }
+
+      clReleaseMemObject(input_mat1);
+      clReleaseMemObject(input_mat2);
+      clReleaseMemObject(output_result);
+      clReleaseCommandQueue(queue);
     }
 
+    opencl_release_kernels(&kernels, nb_kernels);
     clReleaseProgram(program);
     clReleaseContext(context);
     free(devices);
@@ -352,11 +331,10 @@ int mat_mult_cl(int* mat1, int* mat2, int* result, size_t M, size_t N, size_t W)
  */
 void print_help(const char* program)
 {
-  fprintf(stdout, "Usage: %s [-m row size] [-n column size] [-p] [-h]\n\n"
-      "  -h\tDisplay this help\n"
-      "  -p\tPrint the input and output matrixes\n"
-      "  -m\tRow size (default 1024)\n"
-      "  -n\tColumn size (default 1024)\n", program);
+  fprintf(stdout, "Usage: %s [-m row size] [-p] [-h]\n\n"
+      "  -h\t\tDisplay this help\n"
+      "  -p\t\tPrint the input and output matrixes\n"
+      "  -m row\tRow/column size (default 1024)\n", program);
 }
 
 /**
@@ -373,9 +351,8 @@ int parse_cmdline(int argc, char** argv,
    * h: print help and exit
    * p: print input and output matrixes
    * m: row size
-   * n: column size
    */
-  static const char* options = "hpm:n:";
+  static const char* options = "hpm:";
   int opt = 0;
   int print_matrix = 0;
   long m = DEFAULT_ROW_SIZE;
@@ -404,14 +381,6 @@ int parse_cmdline(int argc, char** argv,
           ret = -1;
         }
         break;
-      case 'n':
-        n = atol(optarg);
-        if(n < 2)
-        {
-          fprintf(stderr, "Bad argument for '-n' %ld\n", n);
-          ret = -1;
-        }
-        break;
       default:
         fprintf(stderr, "Bad option (%c)\n", optopt);
         ret = -1;
@@ -421,7 +390,6 @@ int parse_cmdline(int argc, char** argv,
 
   configuration->print_matrix = print_matrix;
   configuration->m = m;
-  configuration->n = n;
 
   return ret;
 }
@@ -434,14 +402,15 @@ int parse_cmdline(int argc, char** argv,
  */
 int main(int argc, char** argv)
 {
-  int* mat1 = NULL;
-  int* mat2 = NULL;
-  int* mat3 = NULL;
+  cl_ulong* mat1 = NULL;
+  cl_ulong* mat2 = NULL;
+  cl_ulong* mat3 = NULL;
   size_t m = DEFAULT_ROW_SIZE;
   size_t n = DEFAULT_COLUMN_SIZE;
   size_t w = DEFAULT_COLUMN_SIZE;
   int print_matrix = 0;
   struct configuration config;
+  int nb_elements = 0;
   int ret = 0;
 
   ret = parse_cmdline(argc, argv, &config);
@@ -456,13 +425,15 @@ int main(int argc, char** argv)
   }
 
   m = config.m;
-  n = config.n;
-  w = config.n;
+  n = config.m;
+  w = config.m;
   print_matrix = config.print_matrix;
 
-  mat1 = malloc((m * n) * sizeof(int));
-  mat2 = malloc((m * n) * sizeof(int));
-  mat3 = malloc((m * n) * sizeof(int));
+  nb_elements = m * n;
+
+  mat1 = malloc(nb_elements * sizeof(cl_ulong));
+  mat2 = malloc(nb_elements * sizeof(cl_ulong));
+  mat3 = malloc(nb_elements * sizeof(cl_ulong));
 
   if(!mat1 || !mat2 || !mat3)
   {
@@ -472,9 +443,6 @@ int main(int argc, char** argv)
     free(mat3);
     exit(EXIT_FAILURE);
   }
-
-  /* random initialization */
-  srand(time(NULL));
 
   mat_init(mat1, mat2, m, n);
 

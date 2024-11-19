@@ -1,14 +1,15 @@
 CFLAGS = -std=c11 -Wall -Wextra -Wstrict-prototypes -Wredundant-decls -Wshadow -pedantic -pedantic -fno-strict-aliasing -D_XOPEN_SOURCE=700 -O2 -I./
-LDFLAGS = 
-BIN = matmult-oacc
+LDFLAGS =
+BIN = matmult-oacc-amd
 OPENACC_FLAGS = -fopenacc -foffload=amdgcn-amdhsa="-march=gfx900"
+# For gfx90c card, export HSA_OVERRIDE_GFX_VERSION=9.0.0 before run the executable
 
 all: $(BIN)
-	
-matmult-oacc: matmult-oacc.c
+
+matmult-oacc-amd: matmult-oacc.c
 	$(CC) $(CFLAGS) $(OPENACC_FLAGS) -o $@ $? $(LDFLAGS)
 
 clean:
 	rm -f $(BIN)
-	rm -f *.o 
+	rm -f *.o
 

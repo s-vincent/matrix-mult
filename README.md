@@ -24,7 +24,7 @@ OMP_PROC_BIND=spread OMP_PLACES=cores ./matmult-omp -t 4
 It is also possible to specify explicitely the affinity with GOMP_CPU_AFFINITY
 environment.
 Example for a quadcore hyperthreaded CPU:
-GOMP_CPU_AFFINITY=0,1,2,3 ./matmult-omp -t 4
+OMP_PLACES=0,1,2,3 ./matmult-omp -t 4
 
 Please note there is no single OpenMP configuration that works _best_ on every
 CPU. It is recommended to study the architecture of CPUs with hwloc-ls and benchit.

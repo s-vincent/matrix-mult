@@ -143,7 +143,7 @@ int opencl_get_file_data(const char* file_path, char** program,
   file_size = ftell(file);
   rewind(file);
 
-  ret = malloc(sizeof(char) * file_size + 1);
+  ret = malloc(sizeof(char) * (file_size + 1));
 
   if(!ret)
   {

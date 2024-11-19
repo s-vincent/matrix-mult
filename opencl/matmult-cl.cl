@@ -27,12 +27,12 @@
  * \param N column size of first matrix.
  * \param W row size of second matrix.
  */
-__kernel void matmult(__global int* mat1, __global int* mat2,
-    __global int* result, int M, int N, int W)
+__kernel void matmult(__global ulong* mat1, __global ulong* mat2,
+    __global ulong* result, uint M, uint N, uint W)
 {
   int i = get_global_id(0);
   int j = get_global_id(1);
-  int tmp = 0;
+  ulong tmp = 0;
 
   for(size_t k = 0 ; k < W ; k++)
   {
@@ -51,8 +51,8 @@ __kernel void matmult(__global int* mat1, __global int* mat2,
  * \param N column size of first matrix.
  * \param W row size of second matrix.
  */
-__kernel void matmult2(__global int* mat1, __global int* mat2,
-    __global int* result, int M, int N, int W)
+__kernel void matmult2(__global ulong* mat1, __global ulong* mat2,
+    __global ulong* result, uint M, uint N, uint W)
 {
     int i = get_global_id(0);
     int j = get_global_id(1);
@@ -68,9 +68,9 @@ __kernel void matmult2(__global int* mat1, __global int* mat2,
     size_t mat2_offset = BLOCK_SIZE * groupj;
     size_t mat1_step = BLOCK_SIZE;
     size_t mat2_step = BLOCK_SIZE * W;
-    int tmp = 0;
-    __local int local_row[BLOCK_SIZE * BLOCK_SIZE];
-    __local int local_col[BLOCK_SIZE * BLOCK_SIZE];
+    ulong tmp = 0;
+    __local ulong local_row[BLOCK_SIZE * BLOCK_SIZE];
+    __local ulong local_col[BLOCK_SIZE * BLOCK_SIZE];
 
     for(size_t off1 = mat1_offset, off2 = mat2_offset ; off1 < mat1_offset_end ;
         off1 += mat1_step, off2 += mat2_step)
@@ -107,8 +107,8 @@ __kernel void matmult2(__global int* mat1, __global int* mat2,
  * \param N column size of first matrix.
  * \param W row size of second matrix.
  */
-__kernel void matmult3(__global int* mat1, __global int* mat2,
-    __global int* result, int M, int N, int W)
+__kernel void matmult3(__global ulong* mat1, __global ulong* mat2,
+    __global ulong* result, uint M, uint N, uint W)
 {
     int groupi = get_group_id(0);
     int groupj = get_group_id(1);
@@ -123,9 +123,9 @@ __kernel void matmult3(__global int* mat1, __global int* mat2,
     size_t mat2_offset = BLOCK_SIZE * groupj;
     size_t mat1_step = BLOCK_SIZE;
     size_t mat2_step = BLOCK_SIZE * W;
-    int tmp = 0;
-    __local int local_row[BLOCK_SIZE][BLOCK_SIZE];
-    __local int local_col[BLOCK_SIZE][BLOCK_SIZE];
+    ulong tmp = 0;
+    __local ulong local_row[BLOCK_SIZE][BLOCK_SIZE];
+    __local ulong local_col[BLOCK_SIZE][BLOCK_SIZE];
 
     for(size_t off1 = mat1_offset, off2 = mat2_offset ; off1 < mat1_offset_end ;
         off1 += mat1_step, off2 += mat2_step)

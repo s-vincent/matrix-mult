@@ -1,14 +1,14 @@
 CFLAGS = -std=c11 -Wall -Wextra -Wstrict-prototypes -Wredundant-decls -Wshadow -pedantic -pedantic -fno-strict-aliasing -D_XOPEN_SOURCE=700 -O2 -I./
-LDFLAGS = 
-BIN = matmult-oacc
+LDFLAGS =
+BIN = matmult-oacc-nvidia
 OPENACC_FLAGS = -fopenacc -foffload=nvptx-none
 
 all: $(BIN)
-	
-matmult-oacc: matmult-oacc.c
-	$(CC) $(CFLAGS) $(OPENACC_FLAGS) -o $@ $? $(LDFLAGS)
+
+matmult-oacc-nvidia: matmult-oacc.c
+	$(CC) $(CFLAGS) $(OPENACC_FLAGS) -o $@  $? $(LDFLAGS)
 
 clean:
 	rm -f $(BIN)
-	rm -f *.o 
+	rm -f *.o
 

@@ -7,3 +7,5 @@ openmp/matmult-omp
 mpi/matmult-mpi
 mpi/matmult-mpi-omp
 openacc/matmult-oacc
+openacc/matmult-oacc-nvidia
+openacc/matmult-oacc-amd
