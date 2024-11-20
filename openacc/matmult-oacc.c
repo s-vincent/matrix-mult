@@ -175,7 +175,6 @@ int parse_cmdline(int argc, char** argv,
   int opt = 0;
   int print_matrix = 0;
   long m = DEFAULT_ROW_SIZE;
-  long n = DEFAULT_COLUMN_SIZE;
   int ret = 1;
 
   assert(configuration);

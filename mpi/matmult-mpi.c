@@ -202,7 +202,6 @@ int parse_cmdline(int argc, char** argv,
   int opt = 0;
   int print_matrix = 0;
   long m = DEFAULT_ROW_SIZE;
-  long n = DEFAULT_COLUMN_SIZE;
   int threads = sysconf(_SC_NPROCESSORS_ONLN);
   int ret = 1;
 
